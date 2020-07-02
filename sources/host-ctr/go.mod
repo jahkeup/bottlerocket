@@ -12,6 +12,7 @@ require (
 	github.com/opencontainers/selinux v1.5.2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
+	github.com/stretchr/testify v1.5.1
 	go.etcd.io/bbolt v1.3.5 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208 // indirect
 	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae // indirect

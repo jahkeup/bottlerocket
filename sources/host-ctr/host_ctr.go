@@ -44,13 +44,11 @@ const (
 )
 
 // Main executes host-ctr as needed in main function.
-func Main(args []string) int {
-	// Configure the logger.
-	useLogSplitHook(log.L.Logger)
-
+func Main(ctx context.Context, args []string) int {
 	// Setup flag parser.
 	flags := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	hc := &HostContainer{}
+	flags.SetOutput(log.L.Logger.Out)
 
 	flags.StringVar(&hc.ContainerID, "ctr-id", "", "The ID of the container to be started")
 	flags.StringVar(&hc.Source, "source", "", "The image to be pulled")
@@ -84,7 +82,7 @@ func Main(args []string) int {
 
 	// Run host-ctr!
 	log.L.WithField("config", hc).Debug("executing")
-	exitCode, _ := hc.execute(context.Background())
+	exitCode, _ := hc.execute(ctx)
 	return exitCode
 }
 

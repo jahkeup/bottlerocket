@@ -5,8 +5,14 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/containerd/containerd/log"
 	"github.com/sirupsen/logrus"
 )
+// UseLogSplitHook configures the default logger to write error and fatal
+// messages to stderr and the remainder to stdout.
+func UseLogSplitHook() {
+	useLogSplitHook(log.L.Logger)
+}
 
 // useLogSplitHook configures the provided logger to write error and fatal
 // messages to stderr and the remainder to stdout.
