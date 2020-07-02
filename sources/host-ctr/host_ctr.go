@@ -2,6 +2,7 @@ package host_ctr
 
 import (
 	"context"
+	errs "errors"
 	"flag"
 	"math/rand"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/reference"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -455,13 +457,14 @@ func withSuperpowered(superpowered bool) oci.SpecOpts {
 
 // pullImage pulls an image from the specified source.
 func pullImage(ctx context.Context, source string, client *containerd.Client) (containerd.Image, error) {
-	// Pull the image
-	// Retry with exponential backoff when failures occur, maximum retry duration will not exceed 31 seconds
+	// Retry with exponential backoff when failures occur, maximum retry
+	// duration will not exceed 31 seconds.
 	const maxRetryAttempts = 5
 	const intervalMultiplier = 2
 	const maxRetryInterval = 30 * time.Second
 	const jitterPeakAmplitude = 4000
 	const jitterLowerBound = 2000
+
 	var retryInterval = 1 * time.Second
 	var retryAttempts = 0
 	var img containerd.Image
@@ -474,9 +477,29 @@ func pullImage(ctx context.Context, source string, client *containerd.Client) (c
 			log.G(ctx).WithField("img", img.Name()).Info("Pulled successfully")
 			break
 		}
+
+		// Check for errors that will not resolve with retries.
+
+		for _, kind := range []error{
+			// Reference errors - provided `source` is invalid in some way.
+			reference.ErrHostnameRequired,
+			reference.ErrInvalid,
+			reference.ErrHostnameRequired,
+			reference.ErrObjectRequired,
+ 		} {
+			if errs.Is(err, kind) {
+				log.G(ctx).
+					WithField("source", source).
+					WithError(err).
+					Error("non-transient error, cannot pull image")
+				return nil, err
+			}
+		}
+
 		if retryAttempts >= maxRetryAttempts {
 			return nil, errors.Wrap(err, "retries exhausted")
 		}
+
 		// Add a random jitter between 2 - 6 seconds to the retry interval
 		retryIntervalWithJitter := retryInterval +
 			time.Duration(jitterRand.Int31n(jitterPeakAmplitude))*time.Millisecond +
