@@ -1,4 +1,4 @@
-package main
+package host_ctr
 
 import (
 	// We need to apply a containerd patch (c134a9b), and the best time to

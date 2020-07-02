@@ -1,4 +1,4 @@
-module host-ctr
+module host_ctr
 
 go 1.12
 

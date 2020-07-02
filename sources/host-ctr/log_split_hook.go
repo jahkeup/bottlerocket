@@ -1,10 +1,22 @@
-package main
+package host_ctr
 
 import (
 	"io"
+	"io/ioutil"
+	"os"
 
 	"github.com/sirupsen/logrus"
 )
+
+// useLogSplitHook configures the provided logger to write error and fatal
+// messages to stderr and the remainder to stdout.
+func useLogSplitHook(logger *logrus.Logger) {
+	logger.SetOutput(ioutil.Discard)
+	logger.AddHook(&LogSplitHook{os.Stdout, []logrus.Level{
+		logrus.WarnLevel, logrus.InfoLevel, logrus.DebugLevel, logrus.TraceLevel}})
+	logger.AddHook(&LogSplitHook{os.Stderr, []logrus.Level{
+		logrus.PanicLevel, logrus.FatalLevel, logrus.ErrorLevel}})
+}
 
 // LogSplitHook is expected to implement the correct logrus interface.
 var _ logrus.Hook = (*LogSplitHook)(nil)
