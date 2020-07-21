@@ -46,8 +46,13 @@ fn run() -> Result<()> {
 
     debug!("settings = {:#?}", settings.settings);
     let ecs = settings.settings.and_then(|s| s.ecs);
-    let cluster = ecs.as_ref().and_then(|s| s.cluster.as_ref());
-    let privileged_disabled = ecs.as_ref().and_then(|s| s.allow_privileged_containers).map(|s| !s);
+    let ecs = if let Some(x) = ecs {
+        x
+    } else {
+        return Err(error::SettingsApplierError::ModelError);
+    };
+    let cluster = ecs.cluster.as_ref();
+    let privileged_disabled = ecs.allow_privileged_containers.map(|s| !s);
     let mut config = ECSConfig{
         cluster: cluster.map(|s| s.clone()),
         instance_attributes: std::collections::HashMap::new(),
@@ -60,7 +65,7 @@ fn run() -> Result<()> {
             config.instance_attributes.insert(VERSION_ATTRIBUTE_NAME.to_string(), os.version_id.to_string());
         }
     }
-    match ecs.as_ref().and_then(|s| s.instance_attributes.as_ref()) {
+    match ecs.instance_attributes.as_ref() {
         None => {}
         Some(attributes) => {
             for (key, value) in attributes {
@@ -140,6 +145,9 @@ mod error {
         SettingsError{
             source: schnauzer::Error
         },
+
+        #[snafu(display("Missing ECS model"))]
+        ModelError,
 
         #[snafu(display("Filesystem operation for path {} failed: {}", path, source))]
         FSError{
