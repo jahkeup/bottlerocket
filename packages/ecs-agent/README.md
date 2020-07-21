@@ -11,7 +11,7 @@ work items for the ECS agent.
 * CNI plugins are not yet packaged - This means that awsvpc mode and AppMesh
   are both currently unsupported.
 * Logging is currently set to `debug` to assist with development.
-* The systemd unit contains many `ExecStartPre`/`ExecStartPost` commands, with
-  little explanation or infrastructure.  One `ExecStopPost` command depends on
-  `/bin/sh`, which is not available in Bottlerocket or compatible with our
-  goals for Bottlerocket.
+* The systemd unit contains many `ExecStartPre`/`ExecStopPost` commands, with
+  little explanation or infrastructure.  The `ExecStartPre` commands should
+  probably be run exactly once, and the `ExecStopPost` commands probably
+  shouldn't ever run.
