@@ -24,6 +24,9 @@ struct ECSConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     privileged_disabled: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    available_logging_drivers: Option<Vec<String>>,
 }
 
 // Returning a Result from main makes it print a Debug representation of the error, but with Snafu
@@ -52,6 +55,12 @@ fn run() -> Result<()> {
     let mut config = ECSConfig {
         cluster: ecs.cluster.map(|s| s.to_owned()),
         privileged_disabled: ecs.allow_privileged_containers.map(|s| !s),
+        // TODO: use user's provided logging drivers
+        available_logging_drivers: Some(vec![
+            "json-file".to_owned(),
+            "none".to_owned(),
+            "awslogs".to_owned(),
+        ]),
         ..Default::default()
     };
     if let Some(os) = settings.os {
