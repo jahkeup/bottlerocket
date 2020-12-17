@@ -11,9 +11,11 @@ It implements a two-tier approach to retrieval: files are first pulled from the
 
 */
 pub(crate) mod error;
+
 use error::Result;
 
 use super::manifest;
+use r13y::Repack;
 use sha2::{Digest, Sha512};
 use snafu::{ensure, OptionExt, ResultExt};
 use std::fs::{self, File};
@@ -41,6 +43,7 @@ impl LookasideCache {
                     Ok(_) => continue,
                     Err(e) => {
                         eprintln!("{}", e);
+                        eprintln!("removing invalid on-disk file: {}", &path.display());
                         fs::remove_file(path).context(error::ExternalFileDelete { path })?;
                     }
                 }
@@ -89,9 +92,38 @@ impl LookasideCache {
             .context(error::ExternalFileSave { path })?;
         drop(f);
 
-        match Self::verify_file(path, hash) {
-            Ok(_) => Ok(()),
-            Err(e) => {
+        // If we know the source to require the use of a repacked archive, then
+        // do so. For example, GitHub generates archives on the fly and produce
+        // a changed hash on future fetches.
+        //
+        // Lookaside cache archives are not repacked, they are checked by the
+        // below verification.
+        let file_url = url.parse().context(error::ExternalFileUrl { url })?;
+
+        let original = Self::verify_file(path, hash);
+        let repacker = r13y::for_source(&file_url);
+        match (original, repacker) {
+            // Downloaded file is verified.
+            (Ok(_), _) => Ok(()),
+            // Unverified, downloaded file can be repacked - try verifying repacked result.
+            (Err(error::Error::ExternalFileVerify { .. }), Some(p)) => {
+                eprintln!("repacking into reproducible archive using {:?}", p);
+                let repacked = p.repack(&path)?;
+                match Self::verify_file(&repacked, hash) {
+                    Ok(_) => {
+                        fs::rename(&repacked, &path)
+                            .context(error::ExternalFileRename { path: &repacked })?;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        fs::remove_file(&repacked)
+                            .context(error::ExternalFileDelete { path: &repacked })?;
+                        Err(e)
+                    }
+                }
+            }
+            // Other errors don't indicate a repack can succeed, bail.
+            (Err(e), _) => {
                 fs::remove_file(path).context(error::ExternalFileDelete { path })?;
                 Err(e)
             }
@@ -119,5 +151,111 @@ impl LookasideCache {
 
         ensure!(digest == hash, error::ExternalFileVerify { path, hash });
         Ok(())
+    }
+}
+
+mod r13y {
+    use super::error::{self, Result};
+    use duct::cmd;
+
+    use snafu::ResultExt;
+    use std::path::{Path, PathBuf};
+    use std::{fmt::Debug, fs};
+
+    pub(crate) fn for_source(url: &url::Url) -> Option<impl Repack + Debug> {
+        let is_github = url
+            .host()
+            .map(|h| h.to_string() == "github.com")
+            .unwrap_or_default();
+        let is_tar_gz = url
+            .path_segments()
+            .map(|ps| {
+                ps.last()
+                    .map(|seg| seg.ends_with(".tar.gz"))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        if is_github && is_tar_gz {
+            return Some(TarGz);
+        }
+
+        None
+    }
+
+    pub(crate) trait Repack {
+        fn repack<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf>;
+    }
+
+    #[derive(Debug)]
+    pub(crate) struct TarGz;
+
+    impl Repack for TarGz {
+        fn repack<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
+            let tmp: PathBuf = ".r13y".into();
+            let unpack = tmp.join("input");
+            let repack = tmp.join("repack.tar");
+
+            fs::create_dir(&tmp).expect("dir");
+            fs::create_dir(&unpack).expect("input unpack dir");
+
+            let unpack_cmd = cmd!(
+                "tar",
+                "-x",
+                "-f",
+                path.as_ref().to_path_buf(),
+                "-C",
+                &unpack,
+            );
+            let repack_cmd = cmd!(
+                "tar",
+                "--sort=name",
+                "--mtime=@0",
+                "--owner=0",
+                "--group=0",
+                "--numeric-owner",
+                "--pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime",
+                "-C",
+                &unpack,
+                "-c",
+                "-f",
+                &repack,
+                // TODO: determine if this is an issue - we'll have to repack
+                // existing tars to efficiently use em.
+                "."
+            );
+            let compress_cmd = cmd!("gzip", "--no-name", &repack);
+
+            let repacked_out: PathBuf = ".repacked.tar.gz".into();
+            let ret = unpack_cmd
+                .run()
+                .context(error::ExternalFileLoad {
+                    path: path.as_ref(),
+                })
+                .and_then(|_| {
+                    repack_cmd.run().context(error::ExternalFileLoad {
+                        path: path.as_ref(),
+                    })
+                })
+                .and_then(|_| {
+                    compress_cmd.run().context(error::ExternalFileLoad {
+                        path: path.as_ref(),
+                    })
+                })
+                .and_then(|_| {
+                    fs::rename(&repack.with_extension("tar.gz"), &repacked_out).context(
+                        error::ExternalFileRename {
+                            path: &repacked_out,
+                        },
+                    )
+                });
+
+            let rmdir = fs::remove_dir_all(&tmp).context(error::ExternalFileDelete { path: &tmp });
+
+            match ret {
+                Ok(_) => rmdir.map(|_| repacked_out),
+                Err(e) => Err(e),
+            }
+        }
     }
 }
