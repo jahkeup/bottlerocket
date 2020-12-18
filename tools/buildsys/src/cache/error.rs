@@ -35,8 +35,8 @@ pub(crate) enum Error {
     #[snafu(display("Failed to load file '{}': {}", path.display(), source))]
     ExternalFileLoad { path: PathBuf, source: io::Error },
 
-    #[snafu(display("Failed to verify file '{}' with hash '{}'", path.display(), hash))]
-    ExternalFileVerify { path: PathBuf, hash: String },
+    #[snafu(display("Failed to verify file '{}': expected hash '{}' but found '{}'", path.display(), hash, actual))]
+    ExternalFileVerify { path: PathBuf, hash: String, actual: String },
 
     #[snafu(display("Failed to rename file '{}': {}", path.display(), source))]
     ExternalFileRename { path: PathBuf, source: io::Error },

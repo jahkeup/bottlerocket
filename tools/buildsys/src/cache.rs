@@ -149,7 +149,7 @@ impl LookasideCache {
         io::copy(&mut f, &mut d).context(error::ExternalFileLoad { path })?;
         let digest = hex::encode(d.finalize());
 
-        ensure!(digest == hash, error::ExternalFileVerify { path, hash });
+        ensure!(digest == hash, error::ExternalFileVerify { path, hash, actual: digest.clone() });
         Ok(())
     }
 }
