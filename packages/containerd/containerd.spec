@@ -2,7 +2,7 @@
 %global gorepo containerd
 %global goimport %{goproject}/%{gorepo}
 
-%global gover 1.3.7
+%global gover 1.3.10
 %global rpmver %{gover}
 
 %global _dwz_low_mem_die_limit 0
@@ -42,9 +42,6 @@ Patch4002: 4002-Ignore-SIGURG-signals-in-signal-forwarder.patch
 
 # Upstream patch; can drop when we move to 1.4.1
 Patch5001: 5001-Always-consume-shim-logs.patch
-
-# Upstream patch; can drop when we move to 1.3.9 or 1.4.2
-Patch6001: 6001-CVE-2020-15257.patch
 
 BuildRequires: git
 BuildRequires: %{_cross_os}glibc-devel
